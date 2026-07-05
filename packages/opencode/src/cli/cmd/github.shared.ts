@@ -18,6 +18,16 @@ export function extractResponseText(parts: SessionV1.Part[]): string | null {
 }
 
 /**
+ * Last-resort fallback for reasoning-only responses: some models (e.g. GLM in
+ * thinking mode) return all output as reasoning_content with an empty content
+ * field, which surfaces here as reasoning parts and no text part.
+ */
+export function extractReasoningText(parts: SessionV1.Part[]): string | null {
+  const reasoningPart = parts.findLast((p) => p.type === "reasoning")
+  return reasoningPart?.text || null
+}
+
+/**
  * Formats a PROMPT_TOO_LARGE error message with details about files in the prompt.
  * Content is base64 encoded, so we calculate original size by multiplying by 0.75.
  */

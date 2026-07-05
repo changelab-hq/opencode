@@ -41,33 +41,33 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Get opencode version
-      id: version
-      shell: bash
-      run: |
-        VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
-        echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
+    # CHANGELAB FORK: run opencode from this repo's source instead of installing
+    # the upstream release binary, so patches to the github handler take effect.
+    # The composite action's repo is checked out at github.action_path, so the
+    # monorepo root is one level up from this file.
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
 
-    - name: Cache opencode
-      id: cache
+    # hashFiles() can't reach outside the workspace, so hash the lockfile by hand
+    - name: Compute lockfile hash
+      id: lockhash
+      shell: bash
+      run: echo "hash=$(sha256sum "${{ github.action_path }}/../bun.lock" | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache opencode node_modules
       uses: actions/cache@v4
       with:
-        path: ~/.opencode/bin
-        key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+        path: ${{ github.action_path }}/../node_modules
+        key: opencode-source-${{ runner.os }}-${{ runner.arch }}-${{ steps.lockhash.outputs.hash }}
 
-    - name: Install opencode
-      if: steps.cache.outputs.cache-hit != 'true'
+    - name: Install opencode dependencies
       shell: bash
-      run: curl -fsSL https://opencode.ai/install | bash
-
-    - name: Add opencode to PATH
-      shell: bash
-      run: echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+      run: cd "${{ github.action_path }}/.." && bun install --frozen-lockfile
 
     - name: Run opencode
       shell: bash
       id: run_opencode
-      run: opencode github run
+      run: bun run --conditions=browser "${{ github.action_path }}/../packages/opencode/src/index.ts" github run
       env:
         MODEL: ${{ inputs.model }}
         AGENT: ${{ inputs.agent }}
